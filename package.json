@@ -1,0 +1,28 @@
+{
+  "name": "pokemon-cards-platform",
+  "private": true,
+  "scripts": {
+    "dev": "node scripts/kill-dev-ports.mjs && turbo dev",
+    "dev:nokill": "turbo dev",
+    "clean:ports": "node scripts/kill-dev-ports.mjs",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "db:generate": "pnpm --filter @pokemon/db generate",
+    "db:push": "pnpm --filter @pokemon/db push",
+    "db:studio": "pnpm --filter @pokemon/db studio"
+  },
+  "devDependencies": {
+    "turbo": "^2.5.0",
+    "typescript": "^5.8.0"
+  },
+  "packageManager": "pnpm@10.33.0",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@prisma/client",
+      "@prisma/engines",
+      "prisma",
+      "esbuild",
+      "sharp"
+    ]
+  }
+}

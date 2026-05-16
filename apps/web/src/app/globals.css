@@ -1,0 +1,110 @@
+@import "tailwindcss";
+
+:root {
+  --background: #080808;
+  --foreground: #f0f0f0;
+  --card: #111111;
+  --card-hover: #181818;
+  --border: #222222;
+  --primary: #f59e0b;
+  --primary-hover: #d97706;
+  --accent: #3b82f6;
+  --success: #22c55e;
+  --danger: #ef4444;
+  --muted: #6b7280;
+}
+
+/* ── Base ─────────────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Scrollbar ────────────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+/* ── Selection ────────────────────────────────────────────────────────────── */
+::selection { background: rgba(245,158,11,0.25); color: #fff; }
+
+/* ── Focus ring ───────────────────────────────────────────────────────────── */
+:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 8px; }
+
+/* ── Animations ───────────────────────────────────────────────────────────── */
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes slide-in-right {
+  from { opacity: 0; transform: translateX(16px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+@keyframes pulse-ring {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(245,158,11,0.3); }
+  50%       { box-shadow: 0 0 0 6px rgba(245,158,11,0); }
+}
+
+.animate-fade-in      { animation: fade-in 0.3s ease both; }
+.animate-slide-right  { animation: slide-in-right 0.25s ease both; }
+.animate-scale-in     { animation: scale-in 0.2s ease both; }
+
+/* Skeleton shimmer */
+.animate-pulse {
+  background: linear-gradient(90deg, var(--card) 25%, rgba(255,255,255,0.04) 50%, var(--card) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.8s infinite;
+}
+
+/* ── Card glow on hover ───────────────────────────────────────────────────── */
+.card-glow {
+  transition: box-shadow 0.2s, border-color 0.2s, transform 0.2s;
+}
+.card-glow:hover {
+  box-shadow: 0 0 0 1px rgba(245,158,11,0.15), 0 8px 24px rgba(0,0,0,0.4);
+  transform: translateY(-1px);
+}
+
+/* ── Progress bar animated fill ───────────────────────────────────────────── */
+@keyframes fill-bar {
+  from { width: 0%; }
+}
+.progress-fill { animation: fill-bar 0.6s cubic-bezier(0.4,0,0.2,1) both; }
+
+/* ── Toast animation ──────────────────────────────────────────────────────── */
+@keyframes toast-in {
+  from { opacity: 0; transform: translateX(100%) scale(0.95); }
+  to   { opacity: 1; transform: translateX(0) scale(1); }
+}
+.toast { animation: toast-in 0.3s cubic-bezier(0.34,1.56,0.64,1) both; }
+
+/* ── Table nums ───────────────────────────────────────────────────────────── */
+.tabular-nums { font-variant-numeric: tabular-nums; }
+
+/* ── Gradient text ────────────────────────────────────────────────────────── */
+.gradient-text {
+  background: linear-gradient(135deg, var(--primary), #fb923c, #fbbf24);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ── Glass card ───────────────────────────────────────────────────────────── */
+.glass {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.07);
+  backdrop-filter: blur(12px);
+}

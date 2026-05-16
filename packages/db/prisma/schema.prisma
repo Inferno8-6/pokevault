@@ -1,0 +1,388 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============ USERS ============
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  discordId     String?   @unique
+  telegramId    String?   @unique
+  username      String?
+  premium          Boolean   @default(false)
+  stripeCustomerId String?   @unique
+  createdAt        DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  collections      Collection[]
+  priceAlerts      PriceAlert[]
+  tradeOffers      TradeOffer[]
+  reviewsGiven     Reputation[] @relation("reviewer")
+  reviewsReceived  Reputation[] @relation("reviewed")
+  accounts         Account[]
+  sessions         Session[]
+  sentMessages     Message[]    @relation("sentMessages")
+  receivedMessages Message[]    @relation("receivedMessages")
+  wishlist         Wishlist[]
+
+  publicProfile      Boolean  @default(false)
+  emailNotifications Boolean  @default(true)
+
+  sealedHoldings SealedHolding[]
+  binders        Binder[]
+
+  @@map("users")
+}
+
+// ============ NEXTAUTH ============
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+// ============ CARDS & PRICES ============
+
+model Card {
+  id         String  @id @default(cuid())
+  tcgId      String  @unique
+  name       String
+  setCode    String
+  setName    String
+  number     String
+  rarity     String?
+  imageSmall String?
+  imageLarge String?
+  supertype  String?
+  hp         String?
+  types      String[]
+
+  // Langue de la version physique de la carte ("fr", "en", "ja").
+  // Un Dracaufeu FR du set 151 et un Dracaufeu JP du set sv2a sont
+  // deux entrées Card distinctes : prix marché, rareté et release date différents.
+  language String @default("fr")
+
+  // Métadonnées de cron pour éviter de retenter à l'infini une carte
+  // dont Cardmarket / pokemontcg.io n'ont pas de cotation.
+  // Si `priceUnavailable=true`, on attend `lastPriceCheckAt + 30j` avant de retenter.
+  lastPriceCheckAt  DateTime?
+  priceUnavailable  Boolean   @default(false)
+
+  prices      PriceHistory[]
+  collections Collection[]
+  priceAlerts PriceAlert[]
+  tradeItems  TradeItem[]
+  wishlists   Wishlist[]
+  binderSlots BinderSlot[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([name])
+  @@index([setCode])
+  @@index([language])
+  @@index([priceUnavailable, lastPriceCheckAt])
+  @@map("cards")
+}
+
+model PriceHistory {
+  id        String   @id @default(cuid())
+  cardId    String
+  source    String
+  variant   String?
+  price     Float
+  currency  String   @default("EUR")
+  fetchedAt DateTime @default(now())
+
+  card Card @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  @@index([cardId, variant, fetchedAt])
+  @@index([fetchedAt])
+  @@map("price_history")
+}
+
+// ============ PORTFOLIO ============
+
+model Collection {
+  id            String   @id @default(cuid())
+  userId        String
+  cardId        String
+  quantity      Int      @default(1)
+  condition     String?
+  variant       String   @default("normal")
+  purchasePrice Float?
+  notes         String?
+  addedAt       DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  card Card @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, cardId, condition, variant])
+  @@index([userId])
+  @@map("collections")
+}
+
+// ============ ALERTS ============
+
+model PriceAlert {
+  id          String    @id @default(cuid())
+  userId      String
+  cardId      String
+  condition   String
+  threshold   Float
+  currency    String    @default("EUR")
+  active      Boolean   @default(true)
+  triggeredAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  card Card @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  @@map("price_alerts")
+}
+
+// ============ TRADING ============
+
+model TradeOffer {
+  id        String   @id @default(cuid())
+  userId    String
+  status    String   @default("open") // open, completed, cancelled
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user     User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items    TradeItem[]
+  matchesA TradeMatch[] @relation("offerA")
+  matchesB TradeMatch[] @relation("offerB")
+  messages Message[]
+
+  @@map("trade_offers")
+}
+
+model TradeItem {
+  id        String @id @default(cuid())
+  offerId   String
+  cardId    String
+  direction String // want, have
+
+  offer TradeOffer @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  card  Card       @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  @@map("trade_items")
+}
+
+model TradeMatch {
+  id        String   @id @default(cuid())
+  offerAId  String
+  offerBId  String
+  notified  Boolean  @default(false)
+  matchedAt DateTime @default(now())
+
+  offerA TradeOffer @relation("offerA", fields: [offerAId], references: [id], onDelete: Cascade)
+  offerB TradeOffer @relation("offerB", fields: [offerBId], references: [id], onDelete: Cascade)
+
+  @@unique([offerAId, offerBId])
+  @@index([offerBId])
+  @@map("trade_matches")
+}
+
+// ============ MESSAGERIE ============
+
+model Message {
+  id           String   @id @default(cuid())
+  fromUserId   String
+  toUserId     String
+  tradeOfferId String?
+  content      String
+  read         Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  from       User        @relation("sentMessages", fields: [fromUserId], references: [id], onDelete: Cascade)
+  to         User        @relation("receivedMessages", fields: [toUserId], references: [id], onDelete: Cascade)
+  tradeOffer TradeOffer? @relation(fields: [tradeOfferId], references: [id], onDelete: SetNull)
+
+  @@index([toUserId, read])
+  @@index([fromUserId])
+  @@index([fromUserId, toUserId])
+  @@map("messages")
+}
+
+// ============ WISHLIST ============
+
+model Wishlist {
+  id       String   @id @default(cuid())
+  userId   String
+  cardId   String
+  maxPrice Float?   // alerte si prix descend sous ce seuil
+  addedAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  card Card @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, cardId])
+  @@map("wishlists")
+}
+
+// ============ RÉPUTATION ============
+
+model Reputation {
+  id         String   @id @default(cuid())
+  userId     String
+  reviewerId String
+  score      Int      // 1-5
+  comment    String?
+  createdAt  DateTime @default(now())
+
+  user     User @relation("reviewed", fields: [userId], references: [id], onDelete: Cascade)
+  reviewer User @relation("reviewer", fields: [reviewerId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, reviewerId])
+  @@map("reputations")
+}
+
+// ============ SEALED PRODUCTS (boosters, ETB, displays, etc.) ============
+
+model SealedProduct {
+  id           String    @id @default(cuid())
+  externalId   String?   @unique // identifiant TCGdex/Cardmarket si dispo
+  name         String
+  productType  String    // booster, etb, display, bundle, tin, collection_box, premium, other
+  setCode      String?
+  setName      String?
+  language     String    @default("FR")
+  imageUrl     String?
+  currentPrice Float?
+  currency     String    @default("EUR")
+  releaseDate  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  holdings SealedHolding[]
+
+  @@index([productType])
+  @@index([setCode])
+  @@index([name])
+  @@map("sealed_products")
+}
+
+model SealedHolding {
+  id            String   @id @default(cuid())
+  userId        String
+  productId     String
+  quantity      Int      @default(1)
+  condition     String   @default("sealed") // sealed, opened, damaged
+  purchasePrice Float?
+  notes         String?
+  addedAt       DateTime @default(now())
+
+  user    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product SealedProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productId, condition])
+  @@index([userId])
+  @@map("sealed_holdings")
+}
+
+// ============ BINDERS (classeurs visuels) ============
+
+model Binder {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String
+  description String?
+  layout      String   @default("3x3") // 3x3, 3x4, 4x3, 4x4
+  isPublic    Boolean  @default(false)
+  coverColor  String   @default("#f59e0b")
+  coverImage  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user  User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  slots BinderSlot[]
+
+  @@index([userId])
+  @@index([isPublic])
+  @@map("binders")
+}
+
+model BinderSlot {
+  id        String  @id @default(cuid())
+  binderId  String
+  cardId    String?
+  position  Int     // 0-based séquence globale
+  condition String?
+  variant   String?
+
+  binder Binder @relation(fields: [binderId], references: [id], onDelete: Cascade)
+  card   Card?  @relation(fields: [cardId], references: [id], onDelete: SetNull)
+
+  @@unique([binderId, position])
+  @@index([binderId])
+  @@map("binder_slots")
+}
+
+// ============ SET METADATA (couverture TCGdex par langue) ============
+//
+// Cache local du statut "TCGdex a-t-il scanné les cartes de ce set ?".
+// TCGdex liste 172 sets JP mais beaucoup retournent `cards: []` au détail.
+// On stocke le résultat pour filtrer la liste côté UI sans payer un round-trip
+// par set à chaque visite.
+
+model SetMeta {
+  id            String   @id @default(cuid())
+  setCode       String
+  language      String   // "fr" | "en" | "ja"
+  /** True si TCGdex a au moins une carte scannée pour ce set+langue.
+   *  Default true pour ne pas masquer les sets non encore probés. */
+  hasCards      Boolean  @default(true)
+  /** Nombre de cartes effectivement disponibles à la dernière vérification. */
+  cardCount     Int      @default(0)
+  lastCheckedAt DateTime @default(now())
+
+  @@unique([setCode, language])
+  @@index([language, hasCards])
+  @@map("set_meta")
+}
