@@ -91,6 +91,7 @@ Règles :
     });
   } catch (error) {
     console.error("Grade estimation error:", error);
-    return NextResponse.json({ error: "Erreur lors de l'estimation" }, { status: 500 });
+    const msg = error instanceof Error ? error.message : String(error);
+    return NextResponse.json({ error: `Erreur Gemini : ${msg}` }, { status: 500 });
   }
 }

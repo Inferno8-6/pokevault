@@ -67,6 +67,7 @@ Si ce n'est pas une carte Pokémon : {"name": null, "set": null, "number": null,
     });
   } catch (error) {
     console.error("Scan error:", error);
-    return NextResponse.json({ error: "Erreur lors de l'analyse" }, { status: 500 });
+    const msg = error instanceof Error ? error.message : String(error);
+    return NextResponse.json({ error: `Erreur Gemini : ${msg}` }, { status: 500 });
   }
 }
