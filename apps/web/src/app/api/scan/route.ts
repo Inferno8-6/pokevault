@@ -28,7 +28,12 @@ export async function POST(request: NextRequest) {
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
     const model = genAI.getGenerativeModel({
       model: "gemini-2.5-flash",
-      generationConfig: { responseMimeType: "application/json", maxOutputTokens: 200 },
+      generationConfig: {
+        responseMimeType: "application/json",
+        maxOutputTokens: 500,
+        // @ts-expect-error — thinkingConfig ok with 2.5 models, types may lag
+        thinkingConfig: { thinkingBudget: 0 },
+      },
     });
 
     const prompt = `Tu es un expert en cartes Pokémon TCG. Identifie la carte sur cette image.
@@ -50,8 +55,10 @@ Si ce n'est pas une carte Pokémon : {"name": null, "set": null, "number": null,
 
     const text = response.response.text();
     const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch)
-      return NextResponse.json({ error: "Impossible d'analyser la réponse" }, { status: 500 });
+    if (!jsonMatch) {
+      console.error("Scan: no JSON in response", { text });
+      return NextResponse.json({ error: `Réponse non-JSON: ${text.slice(0, 200)}` }, { status: 500 });
+    }
 
     const result = JSON.parse(jsonMatch[0]);
 
