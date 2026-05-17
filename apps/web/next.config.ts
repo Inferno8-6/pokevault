@@ -1,8 +1,14 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ["next-auth", "@auth/core"],
+  serverExternalPackages: ["next-auth", "@auth/core", "@prisma/client", ".prisma/client"],
   transpilePackages: ["@pokemon/db", "@pokemon/tcg-api", "@pokemon/shared"],
+  outputFileTracingIncludes: {
+    "/**/*": [
+      "../../node_modules/.pnpm/@prisma+client@*/node_modules/.prisma/client/*.node",
+      "../../node_modules/.pnpm/@prisma+client@*/node_modules/.prisma/client/schema.prisma",
+    ],
+  },
   images: {
     // Cache les images optimisées 7 jours (TCGdex ne change pas souvent)
     minimumCacheTTL: 604800,
