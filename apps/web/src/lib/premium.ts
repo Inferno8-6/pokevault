@@ -1,45 +1,18 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import {
+  FREE_LIMITS,
+  PREMIUM_LIMITS,
+  ADMIN_LIMITS,
+  type PlanLimits,
+} from "@/lib/plan-limits";
+
+// Re-export so existing server-side imports keep working unchanged.
+export { FREE_LIMITS, PREMIUM_LIMITS, ADMIN_LIMITS, type PlanLimits };
 
 const ADMIN_EMAILS = [
   process.env.ADMIN_EMAIL,
 ].filter(Boolean) as string[];
-
-export const FREE_LIMITS = {
-  maxCards: 500,
-  maxBinders: 2,
-  maxAlerts: 0,
-  investorMode: false,
-  export: false,
-  priceHistoryDays: 30,
-} as const;
-
-export const PREMIUM_LIMITS = {
-  maxCards: Infinity,
-  maxBinders: Infinity,
-  maxAlerts: 50,
-  investorMode: true,
-  export: true,
-  priceHistoryDays: 365,
-} as const;
-
-export const ADMIN_LIMITS = {
-  maxCards: Infinity,
-  maxBinders: Infinity,
-  maxAlerts: Infinity,
-  investorMode: true,
-  export: true,
-  priceHistoryDays: Infinity,
-} as const;
-
-export interface PlanLimits {
-  maxCards: number;
-  maxBinders: number;
-  maxAlerts: number;
-  investorMode: boolean;
-  export: boolean;
-  priceHistoryDays: number;
-}
 
 export async function getUserLimits(): Promise<{
   isPremium: boolean;

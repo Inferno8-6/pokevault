@@ -1,7 +1,7 @@
 "use client";
 
 import { useSession } from "next-auth/react";
-import { FREE_LIMITS, PREMIUM_LIMITS, type PlanLimits } from "@/lib/premium";
+import { FREE_LIMITS, PREMIUM_LIMITS, type PlanLimits } from "@/lib/plan-limits";
 
 const ADMIN_EMAILS = [process.env.NEXT_PUBLIC_ADMIN_EMAIL].filter(Boolean);
 
