@@ -9,6 +9,8 @@ interface ScanResult {
   name?: string;
   set?: string | null;
   number?: string | null;
+  language?: string | null;
+  variant?: string | null;
   confidence?: string;
   message?: string;
 }
@@ -22,6 +24,16 @@ interface GradeResult {
   edges?: number;
   confidence?: string;
   details?: string;
+  message?: string;
+}
+
+interface PriceEstimate {
+  hasPrice: boolean;
+  rawPrice?: number;
+  gradedPrice?: number;
+  grade?: number;
+  multiplier?: number;
+  currency?: string;
   message?: string;
 }
 
@@ -43,6 +55,9 @@ export function ScanModal({ onClose, onAddToPortfolio, isPremium }: Props) {
   const [grading, setGrading] = useState(false);
   const [gradeResult, setGradeResult] = useState<GradeResult | null>(null);
   const [lastFile, setLastFile] = useState<File | null>(null);
+  const [selectedCard, setSelectedCard] = useState<NormalizedCard | null>(null);
+  const [priceEst, setPriceEst] = useState<PriceEstimate | null>(null);
+  const [priceLoading, setPriceLoading] = useState(false);
 
   // Compresse une image dans le navigateur (max 1600px côté long, JPEG q=0.85).
   // Ramène les photos smartphone 5-10 Mo sous 1 Mo sans perte visible.
@@ -86,6 +101,8 @@ export function ScanModal({ onClose, onAddToPortfolio, isPremium }: Props) {
     setError(null);
     setAdded(null);
     setGradeResult(null);
+    setSelectedCard(null);
+    setPriceEst(null);
     let file = raw;
     try {
       file = await compressImage(raw);
@@ -130,10 +147,36 @@ export function ScanModal({ onClose, onAddToPortfolio, isPremium }: Props) {
     try {
       const res = await fetch(`/api/cards/search?q=${encodeURIComponent(name)}&pageSize=8`);
       const data = await res.json();
-      setSearchResults(data.data ?? []);
+      const list: NormalizedCard[] = data.data ?? [];
+      setSearchResults(list);
+      // Auto-sélectionne le 1er résultat comme candidat le plus probable
+      if (list.length > 0) {
+        setSelectedCard(list[0]);
+        fetchPrice(list[0].id, null);
+      }
     } finally {
       setSearching(false);
     }
+  }
+
+  // Récupère prix brut (+ gradé si grade fourni). null = uniquement raw.
+  async function fetchPrice(tcgId: string, grade: number | null) {
+    setPriceLoading(true);
+    try {
+      // Fallback : si pas de grade, on utilise grade=10 et on n'affichera que rawPrice
+      const g = grade ?? 10;
+      const res = await fetch(`/api/cards/${encodeURIComponent(tcgId)}/grade-price?grade=${g}`);
+      const data = await res.json();
+      if (res.ok) setPriceEst({ ...data, grade: grade ?? undefined });
+    } finally {
+      setPriceLoading(false);
+    }
+  }
+
+  function selectCard(card: NormalizedCard) {
+    setSelectedCard(card);
+    setPriceEst(null);
+    fetchPrice(card.id, gradeResult?.graded ? gradeResult.grade ?? null : null);
   }
 
   async function estimateGrade() {
@@ -150,6 +193,10 @@ export function ScanModal({ onClose, onAddToPortfolio, isPremium }: Props) {
         return;
       }
       setGradeResult(data);
+      // Recalcule le prix avec le grade obtenu si on a une carte sélectionnée
+      if (data.graded && data.grade != null && selectedCard) {
+        fetchPrice(selectedCard.id, data.grade);
+      }
     } catch {
       setError("Erreur réseau");
     } finally {
@@ -243,6 +290,32 @@ export function ScanModal({ onClose, onAddToPortfolio, isPremium }: Props) {
           </div>
         )}
 
+        {/* Bloc prix brut (apparaît dès qu'on a sélectionné une carte) */}
+        {scanResult?.identified && selectedCard && (
+          <div className="mb-5 rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-xs text-[var(--muted)]">💰 Prix marché brut</p>
+                <p className="truncate text-sm font-semibold text-white">
+                  {selectedCard.name} <span className="text-xs text-[var(--muted)]">· {selectedCard.set?.name} · #{selectedCard.number}</span>
+                </p>
+              </div>
+              <div className="shrink-0 text-right">
+                {priceLoading ? (
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-emerald-400 border-t-transparent" />
+                ) : priceEst?.hasPrice ? (
+                  <p className="text-lg font-bold text-emerald-400">{priceEst.rawPrice?.toFixed(2)} €</p>
+                ) : (
+                  <p className="text-xs text-[var(--muted)]">Indisponible</p>
+                )}
+              </div>
+            </div>
+            {!priceLoading && priceEst && !priceEst.hasPrice && (
+              <p className="mt-1 text-[10px] italic text-[var(--muted)]">{priceEst.message}</p>
+            )}
+          </div>
+        )}
+
         {/* Bouton estimation PSA */}
         {scanResult?.identified && !grading && !gradeResult && lastFile && (
           <div className="mb-5">
@@ -298,6 +371,30 @@ export function ScanModal({ onClose, onAddToPortfolio, isPremium }: Props) {
                 {gradeResult.details && (
                   <p className="mt-3 text-xs italic text-[var(--muted)]">{gradeResult.details}</p>
                 )}
+
+                {/* Estimation prix gradé */}
+                {priceEst?.hasPrice && priceEst.gradedPrice != null && (
+                  <div className="mt-4 rounded-xl border border-amber-500/40 bg-gradient-to-br from-amber-500/10 to-orange-500/10 p-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs text-[var(--muted)]">💎 Valeur estimée gradée PSA {gradeResult.grade}</p>
+                        <p className="text-[10px] text-[var(--muted)]">
+                          {priceEst.rawPrice?.toFixed(2)} € brut × {priceEst.multiplier?.toFixed(1)}
+                        </p>
+                      </div>
+                      <p className="text-2xl font-black text-amber-400">{priceEst.gradedPrice.toFixed(2)} €</p>
+                    </div>
+                    <p className="mt-2 text-[10px] italic text-[var(--muted)]">
+                      ⚠️ Estimation indicative basée sur multiplicateurs PSA moyens. La valeur réelle dépend de la rareté, l&apos;époque et la demande.
+                    </p>
+                  </div>
+                )}
+                {priceLoading && (
+                  <div className="mt-4 flex items-center justify-center gap-2 rounded-xl bg-[var(--card)] p-3">
+                    <div className="h-3 w-3 animate-spin rounded-full border-2 border-amber-400 border-t-transparent" />
+                    <span className="text-xs text-[var(--muted)]">Calcul de la valeur gradée...</span>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3">
@@ -311,7 +408,7 @@ export function ScanModal({ onClose, onAddToPortfolio, isPremium }: Props) {
         {(searching || searchResults.length > 0) && (
           <div>
             <p className="mb-3 text-sm font-medium text-[var(--muted)]">
-              {searching ? "Recherche des cartes correspondantes..." : `${searchResults.length} carte(s) trouvée(s) — cliquez pour ajouter`}
+              {searching ? "Recherche des cartes correspondantes..." : `${searchResults.length} carte(s) trouvée(s) — cliquez pour sélectionner ou ajouter au portfolio`}
             </p>
             {searching ? (
               <div className="flex justify-center py-4">
@@ -319,28 +416,42 @@ export function ScanModal({ onClose, onAddToPortfolio, isPremium }: Props) {
               </div>
             ) : (
               <div className="max-h-56 space-y-2 overflow-y-auto">
-                {searchResults.map((card) => (
-                  <div key={card.id} className="flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--card)] p-3">
-                    <div className="relative h-12 w-9 shrink-0 overflow-hidden rounded-lg">
-                      <CardImage src={card.images?.small} alt={card.name} fill className="object-contain" sizes="36px" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="truncate text-sm font-medium">{card.name}</p>
-                      <p className="text-xs text-[var(--muted)]">{card.set.name} · #{card.number}</p>
-                    </div>
-                    <button
-                      onClick={() => addToPortfolio(card)}
-                      disabled={added === card.id}
-                      className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
-                        added === card.id
-                          ? "bg-[var(--success)]/20 text-[var(--success)]"
-                          : "bg-[var(--primary)] text-black hover:bg-[var(--primary-hover)]"
+                {searchResults.map((card) => {
+                  const isSelected = selectedCard?.id === card.id;
+                  return (
+                    <div
+                      key={card.id}
+                      onClick={() => selectCard(card)}
+                      className={`flex cursor-pointer items-center gap-3 rounded-xl border p-3 transition-colors ${
+                        isSelected
+                          ? "border-emerald-500/50 bg-emerald-500/10"
+                          : "border-[var(--border)] bg-[var(--card)] hover:border-[var(--primary)]/30"
                       }`}
                     >
-                      {added === card.id ? "✓ Ajoutée" : "+ Portfolio"}
-                    </button>
-                  </div>
-                ))}
+                      <div className="relative h-12 w-9 shrink-0 overflow-hidden rounded-lg">
+                        <CardImage src={card.images?.small} alt={card.name} fill className="object-contain" sizes="36px" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="truncate text-sm font-medium">
+                          {isSelected && <span className="mr-1 text-emerald-400">●</span>}
+                          {card.name}
+                        </p>
+                        <p className="text-xs text-[var(--muted)]">{card.set.name} · #{card.number}</p>
+                      </div>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); addToPortfolio(card); }}
+                        disabled={added === card.id}
+                        className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+                          added === card.id
+                            ? "bg-[var(--success)]/20 text-[var(--success)]"
+                            : "bg-[var(--primary)] text-black hover:bg-[var(--primary-hover)]"
+                        }`}
+                      >
+                        {added === card.id ? "✓ Ajoutée" : "+ Portfolio"}
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>

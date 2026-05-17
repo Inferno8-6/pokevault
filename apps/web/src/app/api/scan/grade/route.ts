@@ -38,36 +38,72 @@ export async function POST(request: NextRequest) {
       model: "gemini-2.5-flash",
       generationConfig: {
         responseMimeType: "application/json",
-        maxOutputTokens: 800,
+        maxOutputTokens: 1200,
+        // PSA grading needs reasoning — give it a small thinking budget so
+        // it actually evaluates each criterion instead of guessing.
         // @ts-expect-error — thinkingConfig ok with 2.5 models, types may lag
-        thinkingConfig: { thinkingBudget: 0 },
+        thinkingConfig: { thinkingBudget: 2048 },
       },
     });
 
     const prompt = `Tu es un expert PSA / Beckett en grading de cartes Pokémon TCG.
-Analyse cette photo de carte et estime un grade PSA (1-10).
+Analyse rigoureusement cette photo et estime un grade PSA (1-10).
 
-Évalue chaque critère sur 10 :
-- centering : symétrie du cadre avant/arrière
-- surface : rayures, taches, impressions, brillance
-- corners : usure, blanchiment, pliures aux 4 coins
-- edges : usure, entailles, blanchiment sur les 4 bords
+Méthode d'évaluation (applique-la étape par étape) :
 
-Réponds UNIQUEMENT en JSON avec ce format exact :
+**CENTRAGE** (centering, sur 10) :
+- 10 : cadrage parfait, marges identiques sur les 4 côtés (50/50 H et V)
+- 9 : très léger décalage (max 55/45)
+- 8 : décalage visible (60/40)
+- 7 : décalage marqué (65/35)
+- 6 ou moins : décalage important (70/30 ou pire)
+- Si verso non visible, juge uniquement le recto et marque "confidence" en baisse
+
+**SURFACE** (sur 10) :
+- 10 : aucune rayure, aucun défaut d'impression, brillance intacte
+- 9 : 1-2 micro-défauts invisibles à distance normale
+- 8 : quelques micro-rayures sur le foil, ou minuscule défaut d'impression
+- 7 : rayures visibles sur l'illustration ou holo "scratched"
+- 6 ou moins : rayures profondes, taches, marques évidentes
+
+**COINS** (corners, sur 10) — analyse les 4 coins individuellement :
+- 10 : 4 coins parfaitement pointus
+- 9 : très léger émoussement sur 1 coin
+- 8 : léger blanchiment sur 1-2 coins
+- 7 : blanchiment visible sur 2+ coins
+- 6 ou moins : coins arrondis ou abîmés
+
+**BORDS** (edges, sur 10) :
+- 10 : 4 bords nets, noirs/colorés sans blanchiment
+- 9 : très léger frottement sur 1 bord
+- 8 : blanchiment léger sur 1-2 bords
+- 7 : blanchiment ou entailles visibles
+- 6 ou moins : usure marquée
+
+**GRADE GLOBAL PSA** — règle clé :
+- PSA 10 (Gem Mint) : TOUS les critères ≥ 9.5 ET centrage ≥ 9
+- PSA 9 (Mint) : aucun critère < 8, défauts mineurs autorisés
+- PSA 8 (NM-MT) : 1 critère peut être à 7
+- PSA 7 (NM) : défauts visibles mais légers
+- PSA 6 et moins : défauts évidents
+
+Réponds UNIQUEMENT en JSON valide :
 {
   "grade": 8,
   "centering": 9,
   "surface": 8,
   "corners": 7,
   "edges": 8,
-  "confidence": "medium",
-  "details": "Description courte en français des défauts visibles (ou 'Carte en excellent état' si aucun défaut)"
+  "confidence": "high|medium|low",
+  "details": "2-3 phrases en français décrivant précisément les défauts observés (ou 'Carte en condition exceptionnelle' si grade ≥ 9)"
 }
 
-Règles :
-- grade = note globale PSA estimée (pas la moyenne, mais le jugement expert)
-- confidence : "high" si photo nette recto+verso, "medium" si un seul côté visible, "low" si photo floue/partielle
-- Si la photo ne montre pas une carte Pokémon : {"grade": null, "error": "Pas une carte Pokémon détectée"}`;
+Confidence :
+- "high" : photo nette, recto ET verso visibles, lumière correcte
+- "medium" : un seul côté visible OU lumière imparfaite
+- "low" : photo floue, angle difficile, ou reflets masquant des zones
+
+Si ce n'est pas une carte Pokémon : {"grade": null, "error": "Pas une carte Pokémon détectée"}`;
 
     const response = await model.generateContent([
       { inlineData: { data: base64, mimeType } },
