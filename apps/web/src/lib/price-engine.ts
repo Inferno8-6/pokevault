@@ -73,13 +73,13 @@ export async function fetchAndStorePrices() {
 
   for (let i = 0; i < cards.length; i += FETCH_BATCH_SIZE) {
     const batch = cards.slice(i, i + FETCH_BATCH_SIZE);
-    await Promise.all(batch.map((c) => processCard(c)));
+    await Promise.all(batch.map((c) => processCardInner(c)));
     if (i + FETCH_BATCH_SIZE < cards.length) {
       await new Promise((r) => setTimeout(r, BATCH_PAUSE_MS));
     }
   }
 
-  async function processCard(card: typeof cards[number]) {
+  async function processCardInner(card: typeof cards[number]) {
     try {
       const results = await resolvePrices(card.tcgId, card.language);
       if (results.length > 0) {
@@ -219,6 +219,47 @@ export async function checkAlerts() {
 }
 
 // ─── Utilitaires ─────────────────────────────────────────────────────────────
+
+/**
+ * Fetch + store prices for a single card by Card.id. Used by on-demand
+ * endpoints (e.g. PSA grade-price estimate) when the card has no price
+ * history yet. Returns true if at least one price was stored.
+ */
+export async function processCard(cardId: string): Promise<boolean> {
+  const card = await db.card.findUnique({
+    where: { id: cardId },
+    select: { id: true, tcgId: true, language: true },
+  });
+  if (!card) return false;
+
+  const results = await resolvePrices(card.tcgId, card.language);
+  if (results.length === 0) {
+    await db.card.update({
+      where: { id: card.id },
+      data: { lastPriceCheckAt: new Date(), priceUnavailable: true },
+    });
+    return false;
+  }
+
+  await db.$transaction([
+    ...results.map((r) =>
+      db.priceHistory.create({
+        data: {
+          cardId: card.id,
+          source: r.source,
+          variant: r.variant,
+          price: r.price,
+          currency: "EUR",
+        },
+      }),
+    ),
+    db.card.update({
+      where: { id: card.id },
+      data: { lastPriceCheckAt: new Date(), priceUnavailable: false },
+    }),
+  ]);
+  return true;
+}
 
 export async function getLatestPrice(cardId: string, variant?: string | null) {
   if (variant) {
