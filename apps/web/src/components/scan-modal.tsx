@@ -133,7 +133,10 @@ export function ScanModal({ onClose, onAddToPortfolio, isPremium }: Props) {
       }
       setScanResult(data);
       if (data.identified && data.name) {
-        searchCards(data.name);
+        // TCGdex ne trouve pas "Miraidon ex" — il faut chercher "Miraidon"
+        // tout court. On retire les suffixes ex/GX/V/VMAX/VSTAR/EX.
+        const cleanName = String(data.name).replace(/\s+(ex|EX|GX|V|VMAX|VSTAR|VUNION)$/i, "").trim();
+        searchCards(cleanName || data.name);
       }
     } catch {
       setError("Erreur réseau");
@@ -401,6 +404,15 @@ export function ScanModal({ onClose, onAddToPortfolio, isPremium }: Props) {
                 <p className="text-sm text-[var(--muted)]">❓ {gradeResult.message ?? "Impossible d'estimer le grade"}</p>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Message si aucun résultat de recherche */}
+        {!searching && scanResult?.identified && searchResults.length === 0 && (
+          <div className="mb-5 rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3">
+            <p className="text-sm text-[var(--muted)]">
+              ⚠️ Aucune carte correspondante trouvée dans la base TCGdex. Le prix marché ne peut pas être calculé.
+            </p>
           </div>
         )}
 
