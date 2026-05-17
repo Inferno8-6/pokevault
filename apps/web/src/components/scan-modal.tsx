@@ -13,12 +13,25 @@ interface ScanResult {
   message?: string;
 }
 
+interface GradeResult {
+  graded: boolean;
+  grade?: number;
+  centering?: number;
+  surface?: number;
+  corners?: number;
+  edges?: number;
+  confidence?: string;
+  details?: string;
+  message?: string;
+}
+
 interface Props {
   onClose: () => void;
   onAddToPortfolio?: (tcgId: string) => void;
+  isPremium?: boolean;
 }
 
-export function ScanModal({ onClose, onAddToPortfolio }: Props) {
+export function ScanModal({ onClose, onAddToPortfolio, isPremium }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
@@ -27,6 +40,9 @@ export function ScanModal({ onClose, onAddToPortfolio }: Props) {
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [added, setAdded] = useState<string | null>(null);
+  const [grading, setGrading] = useState(false);
+  const [gradeResult, setGradeResult] = useState<GradeResult | null>(null);
+  const [lastFile, setLastFile] = useState<File | null>(null);
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -37,6 +53,8 @@ export function ScanModal({ onClose, onAddToPortfolio }: Props) {
     setSearchResults([]);
     setError(null);
     setAdded(null);
+    setGradeResult(null);
+    setLastFile(file);
     scanFile(file);
   }
 
@@ -71,6 +89,27 @@ export function ScanModal({ onClose, onAddToPortfolio }: Props) {
       setSearchResults(data.data ?? []);
     } finally {
       setSearching(false);
+    }
+  }
+
+  async function estimateGrade() {
+    if (!lastFile) return;
+    setGrading(true);
+    setGradeResult(null);
+    try {
+      const form = new FormData();
+      form.append("image", lastFile);
+      const res = await fetch("/api/scan/grade", { method: "POST", body: form });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "Erreur lors de l'estimation");
+        return;
+      }
+      setGradeResult(data);
+    } catch {
+      setError("Erreur réseau");
+    } finally {
+      setGrading(false);
     }
   }
 
@@ -155,6 +194,70 @@ export function ScanModal({ onClose, onAddToPortfolio }: Props) {
                 <button onClick={() => fileInputRef.current?.click()} className="mt-2 text-xs text-[var(--primary)] hover:underline">
                   Réessayer avec une autre photo
                 </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Bouton estimation PSA */}
+        {scanResult?.identified && !grading && !gradeResult && lastFile && (
+          <div className="mb-5">
+            {isPremium ? (
+              <button
+                onClick={estimateGrade}
+                className="w-full rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 px-4 py-3 text-sm font-bold text-black transition-opacity hover:opacity-90"
+              >
+                🏆 Estimer le grade PSA
+              </button>
+            ) : (
+              <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-center">
+                <p className="text-sm font-medium text-amber-400">🏆 Estimation PSA — Premium uniquement</p>
+                <a href="/premium" className="mt-1 inline-block text-xs text-[var(--primary)] hover:underline">
+                  Passer en Premium →
+                </a>
+              </div>
+            )}
+          </div>
+        )}
+
+        {grading && (
+          <div className="mb-5 flex items-center gap-3 rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3">
+            <div className="h-4 w-4 animate-spin rounded-full border-2 border-amber-500 border-t-transparent" />
+            <p className="text-sm font-medium text-amber-400">Analyse du grade PSA en cours...</p>
+          </div>
+        )}
+
+        {gradeResult && !grading && (
+          <div className="mb-5">
+            {gradeResult.graded ? (
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
+                <div className="mb-3 flex items-center justify-between">
+                  <p className="text-sm font-bold text-amber-400">🏆 Estimation PSA</p>
+                  <span className="text-xs text-[var(--muted)]">
+                    Confiance : {gradeResult.confidence === "high" ? "🟢 Haute" : gradeResult.confidence === "medium" ? "🟡 Moyenne" : "🔴 Faible"}
+                  </span>
+                </div>
+                <div className="mb-3 flex items-center justify-center">
+                  <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 text-2xl font-black text-black">
+                    {gradeResult.grade}
+                  </div>
+                  <span className="ml-3 text-sm text-[var(--muted)]">/ 10</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  {([["Centrage", gradeResult.centering], ["Surface", gradeResult.surface], ["Coins", gradeResult.corners], ["Bords", gradeResult.edges]] as const).map(([label, val]) => (
+                    <div key={label} className="flex items-center justify-between rounded-lg bg-[var(--card)] px-3 py-2">
+                      <span className="text-[var(--muted)]">{label}</span>
+                      <span className="font-bold" style={{ color: (val ?? 0) >= 8 ? "#22c55e" : (val ?? 0) >= 5 ? "#f59e0b" : "#ef4444" }}>{val}/10</span>
+                    </div>
+                  ))}
+                </div>
+                {gradeResult.details && (
+                  <p className="mt-3 text-xs italic text-[var(--muted)]">{gradeResult.details}</p>
+                )}
+              </div>
+            ) : (
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3">
+                <p className="text-sm text-[var(--muted)]">❓ {gradeResult.message ?? "Impossible d'estimer le grade"}</p>
               </div>
             )}
           </div>

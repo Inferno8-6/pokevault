@@ -248,37 +248,44 @@ export async function getPriceHistory(cardId: string, days = 30) {
 }
 
 export async function getTopMovers(limit = 10) {
-  const cards = await db.card.findMany({
-    include: {
-      prices: {
-        orderBy: { fetchedAt: "desc" },
-        take: 2,
-        where: { source: "cardmarket" },
-      },
-    },
-  });
+  type MoverRow = {
+    id: string; tcg_id: string; name: string; set_name: string;
+    image_small: string | null; current_price: number; previous_price: number; change: number;
+  };
 
-  const movers = cards
-    .filter((c) => c.prices.length >= 2)
-    .map((card) => {
-      const current = card.prices[0].price;
-      const previous = card.prices[1].price;
-      const change = previous > 0 ? ((current - previous) / previous) * 100 : 0;
-      return {
-        id: card.id,
-        tcgId: card.tcgId,
-        name: card.name,
-        setName: card.setName,
-        imageSmall: card.imageSmall,
-        currentPrice: current,
-        previousPrice: previous,
-        change,
-      };
-    })
-    .filter((m) => m.change !== 0);
+  const query = `
+    WITH ranked AS (
+      SELECT ph."cardId", ph.price,
+        ROW_NUMBER() OVER (PARTITION BY ph."cardId" ORDER BY ph."fetchedAt" DESC) AS rn
+      FROM price_history ph
+      WHERE ph.source = 'cardmarket'
+    ),
+    pairs AS (
+      SELECT r1."cardId",
+        r1.price AS current_price,
+        r2.price AS previous_price,
+        CASE WHEN r2.price > 0 THEN ((r1.price - r2.price) / r2.price) * 100 ELSE 0 END AS change
+      FROM ranked r1
+      JOIN ranked r2 ON r1."cardId" = r2."cardId" AND r2.rn = 2
+      WHERE r1.rn = 1 AND r1.price != r2.price
+    )
+    SELECT c.id, c."tcgId" AS tcg_id, c.name, c."setName" AS set_name,
+      c."imageSmall" AS image_small, p.current_price, p.previous_price, p.change
+    FROM pairs p
+    JOIN cards c ON c.id = p."cardId"
+    ORDER BY ABS(p.change) DESC
+    LIMIT ${limit * 2}
+  `;
+  const rows: MoverRow[] = await db.$queryRawUnsafe(query);
 
-  const gainers = [...movers].sort((a, b) => b.change - a.change).slice(0, limit);
-  const losers = [...movers].sort((a, b) => a.change - b.change).slice(0, limit);
+  const mapped = rows.map((r) => ({
+    id: r.id, tcgId: r.tcg_id, name: r.name, setName: r.set_name,
+    imageSmall: r.image_small, currentPrice: r.current_price,
+    previousPrice: r.previous_price, change: r.change,
+  }));
+
+  const gainers = mapped.filter((m) => m.change > 0).slice(0, limit);
+  const losers = mapped.filter((m) => m.change < 0).slice(0, limit);
 
   return { gainers, losers };
 }

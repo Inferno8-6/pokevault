@@ -110,22 +110,18 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "tcgId requis" }, { status: 400 });
   }
 
-  try {
-    const { isPremium } = await getUserLimits();
-    if (!isPremium) {
-      const cardCount = await db.collection.aggregate({
-        where: { userId: session.user.id },
-        _sum: { quantity: true },
-      });
-      if ((cardCount._sum.quantity ?? 0) >= 500) {
-        return NextResponse.json(
-          { error: "Limite de 500 cartes atteinte. Passez en Premium pour un ajout illimité.", premium: true },
-          { status: 403 },
-        );
-      }
+  const { limits } = await getUserLimits();
+  if (limits.maxCards !== Infinity) {
+    const cardCount = await db.collection.aggregate({
+      where: { userId: session.user.id },
+      _sum: { quantity: true },
+    });
+    if ((cardCount._sum.quantity ?? 0) >= limits.maxCards) {
+      return NextResponse.json(
+        { error: `Limite de ${limits.maxCards} cartes atteinte. Passez en Premium pour un ajout illimité.`, premium: true },
+        { status: 403 },
+      );
     }
-  } catch {
-    // Premium check failed — allow the add rather than blocking
   }
 
   // Validation de la quantité

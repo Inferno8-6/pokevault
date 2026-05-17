@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@pokemon/db";
 import { upsertCardFromTCGdex } from "@/lib/card-upsert";
+import { getUserLimits } from "@/lib/premium";
 import type { TCGdexLanguage } from "@/lib/tcgdex";
 
 const SUPPORTED_LANGS: readonly TCGdexLanguage[] = ["fr", "en", "ja"] as const;
@@ -40,6 +41,21 @@ export async function POST(request: NextRequest) {
       { error: "Maximum 500 cartes par import" },
       { status: 400 }
     );
+
+  const { limits } = await getUserLimits();
+  if (limits.maxCards !== Infinity) {
+    const currentCount = await db.collection.aggregate({
+      where: { userId: session.user.id },
+      _sum: { quantity: true },
+    });
+    const total = (currentCount._sum.quantity ?? 0) + tcgIds.length * quantity;
+    if (total > limits.maxCards) {
+      return NextResponse.json(
+        { error: `Limite de ${limits.maxCards} cartes atteinte. Passez en Premium pour un ajout illimité.`, premium: true },
+        { status: 403 },
+      );
+    }
+  }
 
   let added = 0;
   let updated = 0;

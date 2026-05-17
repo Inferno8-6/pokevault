@@ -10,6 +10,7 @@ import {
 } from "recharts";
 import { ImportSetModal } from "@/components/import-set-modal";
 import { ScanModal } from "@/components/scan-modal";
+import { usePremium } from "@/lib/use-premium";
 
 /* ─── Types ──────────────────────────────────────────────────────────────── */
 
@@ -165,6 +166,7 @@ function DonutTooltip({ active, payload }: { active?: boolean; payload?: { name:
 /* ─── Page principale ─────────────────────────────────────────────────────── */
 
 export default function DashboardPage() {
+  const { isPremium } = usePremium();
   const [items, setItems] = useState<PortfolioItem[]>([]);
   const [stats, setStats] = useState<PortfolioStats>({ totalCards: 0, totalValue: 0, change24h: 0, topCard: "-" });
   const [chartHistory, setChartHistory] = useState<{ date: string; value: number }[]>([]);
@@ -687,7 +689,7 @@ export default function DashboardPage() {
 
       {/* ── Modals ── */}
       {showImport && <ImportSetModal onClose={() => setShowImport(false)} onImported={(n) => { setShowImport(false); showToast(`${n} carte${n > 1 ? "s" : ""} importée${n > 1 ? "s" : ""} !`); fetchAll(); }} />}
-      {showScan && <ScanModal onClose={() => setShowScan(false)} onAddToPortfolio={() => { fetchAll(); setShowScan(false); }} />}
+      {showScan && <ScanModal onClose={() => setShowScan(false)} onAddToPortfolio={() => { fetchAll(); setShowScan(false); }} isPremium={isPremium} />}
       {removeTarget && <RemoveQtyModal item={removeTarget} onConfirm={(q) => handleRemove(removeTarget.id, q)} onClose={() => setRemoveTarget(null)} />}
     </div>
   );
