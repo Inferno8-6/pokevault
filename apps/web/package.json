@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.9.0",
+    "@google/generative-ai": "^0.24.1",
     "@pokemon/db": "workspace:*",
     "@pokemon/shared": "workspace:*",
     "@pokemon/tcg-api": "workspace:*",

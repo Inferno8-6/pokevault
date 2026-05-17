@@ -1,18 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import OpenAI from "openai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
-// POST /api/scan — identifie une carte Pokémon depuis une photo
+// POST /api/scan — identifie une carte Pokémon depuis une photo (Gemini Flash)
 export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id)
     return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
 
-  if (!process.env.OPENAI_API_KEY)
-    return NextResponse.json({ error: "Scan non configuré (clé OpenAI manquante)" }, { status: 503 });
-
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  if (!process.env.GEMINI_API_KEY)
+    return NextResponse.json({ error: "Scan non configuré (clé Gemini manquante)" }, { status: 503 });
 
   try {
     const formData = await request.formData();
@@ -20,28 +18,20 @@ export async function POST(request: NextRequest) {
     if (!file)
       return NextResponse.json({ error: "Image manquante" }, { status: 400 });
 
-    // Taille max 4MB
     if (file.size > 4 * 1024 * 1024)
       return NextResponse.json({ error: "Image trop grande (max 4 Mo)" }, { status: 400 });
 
-    // Convertir en base64
     const buffer = await file.arrayBuffer();
     const base64 = Buffer.from(buffer).toString("base64");
     const mimeType = file.type || "image/jpeg";
 
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "image_url",
-              image_url: { url: `data:${mimeType};base64,${base64}`, detail: "low" },
-            },
-            {
-              type: "text",
-              text: `Tu es un expert en cartes Pokémon TCG. Identifie la carte Pokémon sur cette image.
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    const model = genAI.getGenerativeModel({
+      model: "gemini-1.5-flash",
+      generationConfig: { responseMimeType: "application/json", maxOutputTokens: 200 },
+    });
+
+    const prompt = `Tu es un expert en cartes Pokémon TCG. Identifie la carte sur cette image.
 
 Réponds UNIQUEMENT en JSON avec ce format exact :
 {
@@ -51,17 +41,14 @@ Réponds UNIQUEMENT en JSON avec ce format exact :
   "confidence": "high|medium|low"
 }
 
-Si ce n'est pas une carte Pokémon, réponds : {"name": null, "set": null, "number": null, "confidence": "low"}`,
-            },
-          ],
-        },
-      ],
-      max_tokens: 150,
-    });
+Si ce n'est pas une carte Pokémon : {"name": null, "set": null, "number": null, "confidence": "low"}`;
 
-    const text = response.choices[0]?.message?.content ?? "";
+    const response = await model.generateContent([
+      { inlineData: { data: base64, mimeType } },
+      { text: prompt },
+    ]);
 
-    // Extraire le JSON de la réponse
+    const text = response.response.text();
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (!jsonMatch)
       return NextResponse.json({ error: "Impossible d'analyser la réponse" }, { status: 500 });
