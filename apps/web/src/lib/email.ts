@@ -6,7 +6,14 @@
 
 import { Resend } from "resend";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+let _resend: Resend | null = null;
+function getResend(): Resend | null {
+  if (_resend) return _resend;
+  const key = process.env.RESEND_API_KEY;
+  if (!key) return null;
+  _resend = new Resend(key);
+  return _resend;
+}
 const FROM = process.env.EMAIL_FROM ?? "PokeVault <noreply@pokevault.app>";
 const APP_URL = process.env.NEXTAUTH_URL ?? "https://pokevault.app";
 
@@ -27,6 +34,8 @@ export async function sendPriceAlertEmail({
 }) {
   const conditionText = condition === "above" ? "au-dessus de" : "en-dessous de";
 
+  const resend = getResend();
+  if (!resend) return;
   return resend.emails.send({
     from: FROM,
     to,
@@ -67,6 +76,8 @@ export async function sendNewMessageEmail({
   senderName: string;
   preview: string;
 }) {
+  const resend = getResend();
+  if (!resend) return;
   return resend.emails.send({
     from: FROM,
     to,
