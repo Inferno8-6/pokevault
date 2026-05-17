@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
       model: "gemini-2.5-flash-lite",
       generationConfig: {
         responseMimeType: "application/json",
-        maxOutputTokens: 500,
+        maxOutputTokens: 800,
         // @ts-expect-error — thinkingConfig ok with 2.5 models, types may lag
         thinkingConfig: { thinkingBudget: 0 },
       },

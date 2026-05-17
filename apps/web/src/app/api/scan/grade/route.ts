@@ -38,11 +38,12 @@ export async function POST(request: NextRequest) {
       model: "gemini-2.5-flash-lite",
       generationConfig: {
         responseMimeType: "application/json",
-        maxOutputTokens: 1200,
-        // PSA grading needs reasoning — give it a small thinking budget so
-        // it actually evaluates each criterion instead of guessing.
+        // Lite model: skip thinking (limited reasoning capacity, eats tokens
+        // without quality gains for our scoring task) and give the JSON
+        // output a comfortable budget so it always closes properly.
+        maxOutputTokens: 2000,
         // @ts-expect-error — thinkingConfig ok with 2.5 models, types may lag
-        thinkingConfig: { thinkingBudget: 2048 },
+        thinkingConfig: { thinkingBudget: 0 },
       },
     });
 
