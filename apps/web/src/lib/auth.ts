@@ -31,9 +31,11 @@ export const authOptions: NextAuthOptions = {
         try {
           const dbUser = await db.user.findUnique({
             where: { id: user.id },
-            select: { premium: true },
+            select: { premium: true, email: true },
           });
-          session.user.premium = dbUser?.premium ?? false;
+          const adminEmails = [process.env.ADMIN_EMAIL].filter(Boolean) as string[];
+          const isAdmin = !!dbUser?.email && adminEmails.includes(dbUser.email);
+          session.user.premium = dbUser?.premium || isAdmin;
         } catch {
           session.user.premium = false;
         }
