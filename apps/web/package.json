@@ -13,6 +13,7 @@
     "@pokemon/db": "workspace:*",
     "@pokemon/shared": "workspace:*",
     "@pokemon/tcg-api": "workspace:*",
+    "@vercel/speed-insights": "^2.0.0",
     "lucide-react": "^0.509.0",
     "next": "15.5.18",
     "next-auth": "^4.24.0",
