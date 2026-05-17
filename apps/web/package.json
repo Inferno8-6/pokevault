@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "node --max-old-space-size=4096 node_modules/next/dist/bin/next dev -p 3000",
-    "build": "next build",
+    "build": "pnpm --filter @pokemon/db generate && next build",
     "start": "next start",
     "lint": "next lint"
   },
