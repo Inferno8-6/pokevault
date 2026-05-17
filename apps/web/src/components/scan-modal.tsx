@@ -44,16 +44,60 @@ export function ScanModal({ onClose, onAddToPortfolio, isPremium }: Props) {
   const [gradeResult, setGradeResult] = useState<GradeResult | null>(null);
   const [lastFile, setLastFile] = useState<File | null>(null);
 
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const url = URL.createObjectURL(file);
-    setPreview(url);
+  // Compresse une image dans le navigateur (max 1600px côté long, JPEG q=0.85).
+  // Ramène les photos smartphone 5-10 Mo sous 1 Mo sans perte visible.
+  async function compressImage(file: File): Promise<File> {
+    if (file.size < 500 * 1024) return file; // déjà petit
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        const MAX = 1600;
+        let { width, height } = img;
+        if (width > MAX || height > MAX) {
+          if (width > height) { height = Math.round((height * MAX) / width); width = MAX; }
+          else { width = Math.round((width * MAX) / height); height = MAX; }
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width; canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) { URL.revokeObjectURL(url); return reject(new Error("Canvas unsupported")); }
+        ctx.drawImage(img, 0, 0, width, height);
+        canvas.toBlob(
+          (blob) => {
+            URL.revokeObjectURL(url);
+            if (!blob) return reject(new Error("Compression échouée"));
+            resolve(new File([blob], file.name.replace(/\.[^.]+$/, ".jpg"), { type: "image/jpeg" }));
+          },
+          "image/jpeg",
+          0.85,
+        );
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Image illisible")); };
+      img.src = url;
+    });
+  }
+
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const raw = e.target.files?.[0];
+    if (!raw) return;
     setScanResult(null);
     setSearchResults([]);
     setError(null);
     setAdded(null);
     setGradeResult(null);
+    let file = raw;
+    try {
+      file = await compressImage(raw);
+    } catch {
+      setError("Impossible de traiter l'image (format non supporté)");
+      return;
+    }
+    if (file.size > 4 * 1024 * 1024) {
+      setError(`Image trop grande même après compression (${(file.size / 1024 / 1024).toFixed(1)} Mo). Réessayez avec une photo plus petite.`);
+      return;
+    }
+    setPreview(URL.createObjectURL(file));
     setLastFile(file);
     scanFile(file);
   }
