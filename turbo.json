@@ -13,6 +13,7 @@
     "POKEMONTCG_API_KEY",
     "OPENAI_API_KEY",
     "RESEND_API_KEY",
+    "ADMIN_EMAIL",
     "VERCEL_URL",
     "NODE_ENV"
   ],
